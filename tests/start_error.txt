@@ -1,0 +1,6 @@
+# Stage 2 error-skip test
+ls /tmp
+unknown_command
+cd /tmp
+ls
+exit

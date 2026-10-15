@@ -5,17 +5,17 @@ class CommandResult:
         self.exit = exit
 
 
-def cmd_ls(args):
+def cmd_ls(args,state):
     """Заглушка: выводит своё имя и аргументы."""
     return CommandResult(f"ls: args={args}")
 
 
-def cmd_cd(args):
+def cmd_cd(args,state):
     """Заглушка: выводит своё имя и аргументы."""
     return CommandResult(f"cd: args={args}")
 
 
-def cmd_exit(args):
+def cmd_exit(args,state):
     return CommandResult(exit=True)
 
 
@@ -26,10 +26,10 @@ COMMANDS = {
 }
 
 
-def execute(command, args):
+def execute(command, args, state=None):
     if command not in COMMANDS:
         return CommandResult(f"{command}: command not found", error=True)
     try:
-        return COMMANDS[command](args)
+        return COMMANDS[command](args,state)
     except Exception as e:
         return CommandResult(f"{command}: error: {e}", error=True)

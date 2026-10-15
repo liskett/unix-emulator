@@ -1,0 +1,5 @@
+# Stage 2 success
+ls /tmp
+cd /tmp
+ls
+exit
