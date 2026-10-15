@@ -10,7 +10,7 @@ from pathlib import Path
 from tkinter import scrolledtext
 
 from src.parser import parse
-from src.commands import execute
+from src.commands import execute, make_prompt
 from src.vfs import load_vfs, compute_vfs_info
 
 
@@ -58,7 +58,7 @@ def run_script(path, printer, state=None):
                 if not line or line.startswith("#"):
                     continue
 
-                printer(f"$ {line}\n")
+                printer(f"{make_prompt(state) if state else '$'} {line}\n")
                 command, args = parse(line)
                 result = execute(command, args, state)
 

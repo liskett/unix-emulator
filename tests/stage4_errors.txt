@@ -1,0 +1,8 @@
+# Stage 4 error handling
+date extra
+ls -x
+ls docs /docs
+cd missing
+wc missing.txt
+wc docs
+exit

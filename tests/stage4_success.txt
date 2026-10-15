@@ -1,0 +1,27 @@
+# Stage 4 commands test
+date
+uptime
+ls
+ls -l
+ls -a
+ls -la
+ls -lh
+ls -ah
+ls -lah
+ls -l -a -h
+ls docs
+ls ./docs
+ls /docs
+ls /docs/.././docs
+cd docs
+ls
+cd ..
+cd /docs
+ls
+cd /
+ls
+wc readme.txt
+wc ./readme.txt
+wc /docs/info.txt
+wc /docs/.././readme.txt
+exit
