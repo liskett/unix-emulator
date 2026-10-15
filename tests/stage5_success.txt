@@ -1,0 +1,19 @@
+# Stage 5 chown/rm test
+ls -l
+chown tyoma readme.txt
+ls -l
+chown admin docs
+ls -l
+chown student /docs/info.txt
+ls -l /docs
+chown user /docs/.././readme.txt
+ls -l
+cd docs
+chown teacher info.txt
+ls -l
+cd /
+rm readme.txt
+ls
+rm config.ini
+ls -l
+exit

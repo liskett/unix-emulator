@@ -9,6 +9,9 @@ from src.path_utils import format_path, get_node, resolve_path
 LS_OPTIONS = {"l", "h", "a"}
 SINGLE_ARG_COUNT = 1
 KIB = 1024
+CD_ARGS_COUNT = 1
+CHOWN_ARGS_COUNT = 2
+
 class CommandResult:
     def __init__(self, output='', error=False, exit=False):
         self.output = output
@@ -16,9 +19,8 @@ class CommandResult:
         self.exit = exit
 
 
-
 def cmd_cd(args, state):
-    if len(args) != SINGLE_ARG_COUNT:
+    if len(args) != CD_ARGS_COUNT:
         return CommandResult(
             "Ошибка: команда cd ожидает один аргумент", error=True
         )
@@ -41,7 +43,6 @@ def cmd_cd(args, state):
 
     state["cwd"][:] = path_parts
     return CommandResult()
-
 
 
 def parse_ls_arguments(args):
@@ -130,8 +131,6 @@ def cmd_ls(args, state):
     lines = [format_entry(n, c, options) for n, c in entries]
     return CommandResult("\n".join(lines))
 
-
-
 def cmd_vfs_info(args, state):
     if args:
         return CommandResult(
@@ -141,8 +140,6 @@ def cmd_vfs_info(args, state):
     h = (state or {}).get("vfs_hash", "(не указан)")
     return CommandResult(f"Имя VFS: {name}\nSHA-256: {h}")
 
-
-
 def cmd_date(args, state):
     if args:
         return CommandResult(
@@ -150,8 +147,6 @@ def cmd_date(args, state):
         )
     now = datetime.now().astimezone()
     return CommandResult(now.strftime("%Y-%m-%d %H:%M:%S %Z"))
-
-
 
 def cmd_wc(args, state):
     if len(args) != SINGLE_ARG_COUNT:
@@ -183,7 +178,6 @@ def cmd_wc(args, state):
     return CommandResult(f"{lines} {words} {size} {path_parts[-1]}")
 
 
-
 def cmd_uptime(args, state):
     if args:
         return CommandResult(
@@ -195,6 +189,55 @@ def cmd_uptime(args, state):
     s = elapsed % 60
     return CommandResult(f"Uptime: {h}:{m:02d}:{s:02d}")
 
+def cmd_rm(args, state):
+    """Удалить файл из VFS (только в памяти)."""
+    if len(args) != SINGLE_ARG_COUNT:
+        return CommandResult(
+            "Ошибка: команда rm ожидает один аргумент", error=True
+        )
+
+
+    try:
+        path_parts, node = resolve_path(
+            state["vfs"], args[0], state["cwd"]
+        )
+    except FileNotFoundError:
+        return CommandResult("Ошибка: путь не найден", error=True)
+    except NotADirectoryError:
+        return CommandResult(
+            "Ошибка: часть пути не является каталогом", error=True
+        )
+
+    if node["type"] == "dir":
+        return CommandResult(
+            "Ошибка: rm не удаляет каталоги", error=True
+        )
+
+    parent = get_node(state["vfs"], path_parts[:-1])
+    del parent["children"][path_parts[-1]]
+    return CommandResult()
+
+
+def cmd_chown(args, state):
+    """Изменить владельца объекта VFS (только в памяти)."""
+    if len(args) != CHOWN_ARGS_COUNT:
+        return CommandResult(
+            "Ошибка: команда chown ожидает владельца и путь", error=True
+        )
+
+    owner, path = args[0], args[1]
+
+    try:
+        _, node = resolve_path(state["vfs"], path, state["cwd"])
+    except FileNotFoundError:
+        return CommandResult("Ошибка: путь не найден", error=True)
+    except NotADirectoryError:
+        return CommandResult(
+            "Ошибка: часть пути не является каталогом", error=True
+        )
+
+    node["owner"] = owner
+    return CommandResult()
 
 
 def cmd_exit(args, state):
@@ -205,7 +248,6 @@ def cmd_exit(args, state):
     return CommandResult(exit=True)
 
 
-
 COMMANDS = {
     "ls": cmd_ls,
     "cd": cmd_cd,
@@ -213,6 +255,8 @@ COMMANDS = {
     "date": cmd_date,
     "wc": cmd_wc,
     "uptime": cmd_uptime,
+    "rm": cmd_rm,
+    "chown": cmd_chown,
     "exit": cmd_exit,
 }
 

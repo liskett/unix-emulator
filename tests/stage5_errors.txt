@@ -1,0 +1,9 @@
+# Stage 5 error handling
+ls
+rm missing.txt
+rm docs
+chown tyoma missing.txt
+chown tyoma
+chown one two three
+ls
+exit
