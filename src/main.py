@@ -1,13 +1,17 @@
+"""Эмулятор командной оболочки — GUI + headless."""
+
 import argparse
 import getpass
 import socket
 import sys
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import scrolledtext
 
 from src.parser import parse
 from src.commands import execute
+from src.vfs import load_vfs, compute_vfs_info
 
 
 def build_title():
@@ -18,9 +22,31 @@ def build_title():
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Shell emulator")
-    parser.add_argument("--vfs", help="Path to VFS")
+    parser.add_argument("--vfs", help="Path to VFS (ZIP)")
     parser.add_argument("--script", help="Path to startup script")
     return parser.parse_args(argv)
+
+
+def build_state(args):
+    """Собрать состояние: VFS в памяти + cwd + метаданные."""
+    state = {
+        "vfs": {"type": "dir", "owner": "root", "children": {}},
+        "cwd": [],
+        "vfs_name": "(не указан)",
+        "vfs_hash": "(не указан)",
+        "start_time": time.time(),
+    }
+
+    if args.vfs is not None:
+        try:
+            state["vfs"] = load_vfs(args.vfs)
+            name, h = compute_vfs_info(args.vfs)
+            state["vfs_name"] = name
+            state["vfs_hash"] = h
+        except (OSError, ValueError) as e:
+            return None, f"Ошибка загрузки VFS: {e}"
+
+    return state, None
 
 
 def run_script(path, printer, state=None):
@@ -54,13 +80,25 @@ def run_headless(args):
     print(f"VFS: {args.vfs or '(не указан)'}")
     print(f"Скрипт: {args.script or '(не указан)'}")
 
-    if not Path(args.script).is_file():
-        print(f"Ошибка: скрипт не найден: {args.script}", file=sys.stderr)
+    state, err = build_state(args)
+    if err:
+        print(err, file=sys.stderr)
         return 1
 
-    result = run_script(args.script, printer)
-    if result is False:
-        return 1
+    if args.vfs is not None:
+        print(f"Имя VFS: {state['vfs_name']}")
+        print(f"SHA-256: {state['vfs_hash']}")
+
+    if args.script is not None:
+        if not Path(args.script).is_file():
+            print(f"Ошибка: скрипт не найден: {args.script}", file=sys.stderr)
+            return 1
+        result = run_script(args.script, printer, state)
+        if result is False:
+            return 1
+        if result is None:
+            return 0
+
     return 0
 
 class EmulatorApp:
@@ -70,14 +108,24 @@ class EmulatorApp:
         self.root.geometry("820x560")
         self._build_ui()
 
+        state, err = build_state(args)
+        if err:
+            self._append(err + "\n", error=True)
+            self.state = None
+            return
+        self.state = state
+
         self._append(f"VFS: {args.vfs or '(не указан)'}\n")
-        self._append(f"Скрипт: {args.script or '(не указан)'}\n\n")
+        self._append(f"Скрипт: {args.script or '(не указан)'}\n")
+        if args.vfs is not None:
+            self._append(f"Имя VFS: {state['vfs_name']}\n")
+            self._append(f"SHA-256: {state['vfs_hash']}\n")
+        self._append("\n")
 
         if args.script is not None:
             if not Path(args.script).is_file():
                 self._append(
-                    f"Ошибка: скрипт не найден: {args.script}\n",
-                    error=True,
+                    f"Ошибка: скрипт не найден: {args.script}\n", error=True
                 )
             else:
                 self._run_script(args.script)
@@ -91,12 +139,9 @@ class EmulatorApp:
             state="disabled",
         )
         self.output.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-
         frame = tk.Frame(self.root)
         frame.pack(fill=tk.X, padx=4, pady=(0, 4))
-
         tk.Label(frame, text="$", font=("Consolas", 11)).pack(side=tk.LEFT)
-
         self.entry = tk.Entry(frame, font=("Consolas", 11))
         self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 0))
         self.entry.bind("<Return>", self._on_enter)
@@ -114,7 +159,7 @@ class EmulatorApp:
     def _run_script(self, path):
         def printer(text, error=False):
             self._append(text, error)
-        result = run_script(path, printer)
+        result = run_script(path, printer, self.state)
         if result is None:
             self._append("Bye.\n")
             self.root.after(200, self.root.destroy)
@@ -124,13 +169,11 @@ class EmulatorApp:
         self.entry.delete(0, tk.END)
         if not line.strip():
             return
-
         self._append(f"$ {line}\n")
         command, args = parse(line)
         if command is None:
             return
-
-        result = execute(command, args)
+        result = execute(command, args, self.state)
         if result.exit:
             self._append("Bye.\n")
             self.root.after(200, self.root.destroy)

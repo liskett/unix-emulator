@@ -8,12 +8,14 @@
 
 Проект представляет собой эмулятор UNIX-подобной командной оболочки
 с графическим интерфейсом (Tkinter). Поддерживает параметры командной
-строки и выполнение стартовых скриптов.
+строки, выполнение стартовых скриптов и загрузку виртуальной файловой
+системы (VFS) из ZIP-архива в оперативную память.
 
 Выполненные этапы:
 
 - Этап 1. REPL.
 - Этап 2. Конфигурация.
+- Этап 3. Виртуальная файловая система (VFS).
 
 ## Этап 1. REPL
 
@@ -40,7 +42,7 @@
 
 Поддерживаются параметры:
 
-- `--vfs` — путь к физическому расположению VFS;
+- `--vfs` — путь к физическому расположению VFS (ZIP-архив);
 - `--script` — путь к стартовому скрипту.
 
 При запуске программа выводит отладочную информацию о переданных
@@ -67,19 +69,90 @@
 (без графического окна) — это позволяет запускать его
 из shell-скриптов.
 
+## Этап 3. Виртуальная файловая система (VFS)
+
+Источник VFS — **ZIP-архив**. Содержимое загружается в оперативную
+память при запуске эмулятора. Исходный архив при этом не
+распаковывается на диск и не модифицируется.
+
+Файловая система представляется вложенными словарями Python.
+Для каждого объекта сохраняется тип (`dir` / `file`), владелец
+и содержимое (для файлов — в виде байтов, что позволяет
+поддерживать как текстовые, так и двоичные данные).
+
+### Служебная команда vfs-info
+
+Команда `vfs-info` выводит информацию о загруженной VFS:
+
+- имя архива;
+- хеш SHA-256 содержимого архива.
+
+Пример:
+
+```text
+$ vfs-info
+Имя VFS: minimal.zip
+SHA-256: 545412b56a3013640cc33dbeafd673162eb15a271d6426a88d3238c139296fb0
+```
+
+Хеш вычисляется по байтам ZIP-файла и позволяет однозначно
+идентифицировать конкретную версию VFS.
+
+### Обработка ошибок загрузки VFS
+
+Предусмотрена обработка следующих ошибок:
+
+- файл VFS не найден;
+- указанный файл не является ZIP-архивом.
+
+При возникновении ошибки программа выводит соответствующее
+сообщение и завершается с ненулевым кодом.
+
+### Тестовые VFS
+
+Для проверки загрузки подготовлены три ZIP-архива в папке
+`tests/vfs/`:
+
+- `minimal.zip` — минимальная VFS (один текстовый файл);
+- `multiple.zip` — несколько файлов и вложенный каталог `docs`;
+- `nested.zip` — три уровня вложенности каталогов
+  (`level1/level2/level3/deep.txt`).
+
+Архивы собираются из исходных директорий скриптом
+`tests/build_vfs.py`:
+
+```bash
+python3 tests/build_vfs.py
+```
+
+### Команды ls и cd
+
+На данном этапе команды `ls` и `cd` остаются заглушками,
+которые выводят своё имя и аргументы. Полноценная работа с VFS
+будет реализована на четвёртом этапе.
+
 ## Структура проекта
 
 - `src/` — исходный код эмулятора;
-- `src/main.py` — основной файл (GUI + headless, параметры командной строки);
+- `src/main.py` — основной файл (GUI + headless, параметры
+  командной строки, загрузка VFS);
 - `src/parser.py` — разбор пользовательского ввода;
 - `src/commands.py` — команды и класс `CommandResult`;
-- `tests/` — тесты и стартовые скрипты;
-- `tests/start_ok.txt` — успешный стартовый сценарий;
-- `tests/start_error.txt` — сценарий с ошибочной командой;
-- `tests/test_default.sh` — тест запуска со стартовым скриптом;
-- `tests/test_parameters.sh` — тест параметров командной строки;
-- `tests/test_invalid_script.sh` — тест отсутствующего скрипта;
-- `tests/test_skip_errors.sh` — тест пропуска ошибок в скрипте;
+- `src/vfs.py` — загрузка VFS из ZIP-архива, вычисление SHA-256;
+- `tests/` — тесты, стартовые скрипты и тестовые VFS;
+- `tests/build_vfs.py` — сборка ZIP-архивов VFS;
+- `tests/vfs/` — исходные директории тестовых VFS;
+- `tests/start_ok.txt`, `tests/start_error.txt` — стартовые сценарии
+  этапа 2;
+- `tests/stage3_minimal.txt`, `tests/stage3_multiple.txt`,
+  `tests/stage3_nested.txt` — стартовые сценарии этапа 3;
+- `tests/test_default.sh`, `tests/test_parameters.sh`,
+  `tests/test_invalid_script.sh`, `tests/test_skip_errors.sh` —
+  shell-тесты этапа 2;
+- `tests/test_vfs_minimal.sh`, `tests/test_vfs_multiple.sh`,
+  `tests/test_vfs_nested.sh`, `tests/test_vfs_errors.sh` —
+  shell-тесты этапа 3;
+- `tests/test_vfs.py` — модульные тесты загрузчика VFS;
 - `run.sh` — скрипт запуска;
 - `README.md` — документация проекта;
 - `.gitignore` — список файлов, исключённых из Git.
@@ -103,7 +176,7 @@ python3 -m src.main
 Передача пути к VFS:
 
 ```bash
-./run.sh --vfs my_vfs
+./run.sh --vfs tests/vfs/minimal.zip
 ```
 
 Передача стартового скрипта:
@@ -115,7 +188,7 @@ python3 -m src.main
 Одновременная передача двух параметров:
 
 ```bash
-./run.sh --vfs my_vfs --script tests/start_ok.txt
+./run.sh --vfs tests/vfs/minimal.zip --script tests/stage3_minimal.txt
 ```
 
 ## Примеры интерактивного режима
@@ -127,11 +200,9 @@ ls: args=['/tmp']
 $ cd /tmp
 cd: args=['/tmp']
 
-$ ls
-ls: args=[]
-
-$ unknown
-unknown: command not found
+$ vfs-info
+Имя VFS: minimal.zip
+SHA-256: 545412b56a3013640cc33dbeafd673162eb15a271d6426a88d3238c139296fb0
 
 $ exit
 Bye.
@@ -139,12 +210,17 @@ Bye.
 
 ## Пример стартового скрипта
 
-Файл `tests/start_ok.txt`:
+Файл `tests/stage3_nested.txt`:
 
 ```text
-# Stage 2 success
-ls /tmp
-cd /tmp
+# Nested VFS test
+vfs-info
+ls
+cd level1
+ls
+cd level2
+ls
+cd level3
 ls
 exit
 ```
@@ -152,59 +228,42 @@ exit
 Запуск:
 
 ```bash
-./run.sh --script tests/start_ok.txt
+./run.sh --vfs tests/vfs/nested.zip --script tests/stage3_nested.txt
 ```
 
 Пример результата:
 
 ```text
-VFS: (не указан)
-Скрипт: tests/start_ok.txt
-$ ls /tmp
-ls: args=['/tmp']
-$ cd /tmp
-cd: args=['/tmp']
+VFS: tests/vfs/nested.zip
+Скрипт: tests/stage3_nested.txt
+Имя VFS: nested.zip
+SHA-256: d9dfe65233f1f37aba20d2182988e0fffd2a2f21f2824b858d14ece9b1c0185a
+$ vfs-info
+Имя VFS: nested.zip
+SHA-256: d9dfe65233f1f37aba20d2182988e0fffd2a2f21f2824b858d14ece9b1c0185a
 $ ls
 ls: args=[]
-$ exit
-```
-
-## Обработка ошибок в стартовом скрипте
-
-Ошибочные строки не прерывают выполнение скрипта.
-При ошибке команды выводится сообщение, и эмулятор продолжает
-выполнять следующие строки.
-
-Файл `tests/start_error.txt`:
-
-```text
-# Stage 2 error-skip test
-ls /tmp
-unknown_command
-cd /tmp
-ls
-exit
-```
-
-Пример результата:
-
-```text
-VFS: (не указан)
-Скрипт: tests/start_error.txt
-$ ls /tmp
-ls: args=['/tmp']
-$ unknown_command
-unknown_command: command not found
-$ cd /tmp
-cd: args=['/tmp']
-$ ls
-ls: args=[]
+$ cd level1
+cd: args=['level1']
+...
 $ exit
 ```
 
 ## Тестирование
 
-Shell-тесты:
+Сборка тестовых ZIP-архивов VFS:
+
+```bash
+python3 tests/build_vfs.py
+```
+
+Модульные тесты Python:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Shell-тесты этапа 2:
 
 ```bash
 ./tests/test_default.sh
@@ -213,10 +272,25 @@ Shell-тесты:
 ./tests/test_skip_errors.sh
 ```
 
+Shell-тесты этапа 3:
+
+```bash
+./tests/test_vfs_minimal.sh
+./tests/test_vfs_multiple.sh
+./tests/test_vfs_nested.sh
+./tests/test_vfs_errors.sh
+```
+
 При успешном прохождении каждый тест выводит:
 
 ```text
 TEST PASSED
+```
+
+или:
+
+```text
+ALL ERROR TESTS PASSED
 ```
 
 ## Сборка

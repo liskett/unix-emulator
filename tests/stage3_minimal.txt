@@ -1,0 +1,4 @@
+# Minimal VFS test
+vfs-info
+ls
+exit
